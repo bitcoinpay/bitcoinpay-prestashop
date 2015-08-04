@@ -26,6 +26,7 @@ class BitcoinPay extends PaymentModule
 		$this->tab = 'payments_gateways';
 		$this->version = '0.5';
 		$this->author = 'BitcoinPay';
+               $this->module_key = '5579ce051d8c78b348116faae18ea14a';
 		$this->ps_versions_compliancy = array('min' => '1.5', 'max' => '1.6');
 		$this->controllers = array('payment', 'notification', 'return');
 
