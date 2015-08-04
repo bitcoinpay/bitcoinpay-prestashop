@@ -1,15 +1,18 @@
 {if $presta_15}
 	<p class="payment_module">
-		<a href="{$link->getModuleLink('bitcoinpay','payment')|escape:'html'}" title="{l s='Pay with Bitcoin' mod='bitcoinpay'}">
-			<img src="{$module_dir}logo_64.png" width="50" height="50" />
+		<a href="{$payment_url|escape:'html'}" title="{l s='Pay with Bitcoin' mod='bitcoinpay'}">
+			<img src="{$button_image_url}" height="50" />
 			{l s='Pay with Bitcoin' mod='bitcoinpay'}
 		</a>
 	</p>
 {else}
 	<div class="row">
-		<div class="col-xs-12 col-md-6">
+		<div class="col-xs-12">
 			<p class="payment_module">
-				<a class="bitcoinpay bankwire" style="background-image: url('{$module_dir}logo_64.png'); background-position: 15px 50%;" href="{$link->getModuleLink('bitcoinpay','payment')|escape:'html'}" title="{l s='Pay with Bitcoin' mod='bitcoinpay'}">{l s='Pay with Bitcoin' mod='bitcoinpay'}</a>
+				<a class="bitcoinpay bankwire" href="{$payment_url|escape:'html'}" title="{l s='Pay with Bitcoin' mod='bitcoinpay'}" style="background-image: url('{$button_image_url}'); background-position: 15px 50%;">
+					{l s='Pay with Bitcoin' mod='bitcoinpay'}
+					<span>(instant processing)</span>
+				</a>
 			</p>
 		</div>
 	</div>
