@@ -19,14 +19,14 @@ class BitcoinPay extends PaymentModule
 {
 	protected $apiUrl = 'https://bitcoinpay.com/api/v1/';
 	protected $apiKey;
+	protected $defaultValues = array();
 
 	public function __construct()
 	{
 		$this->name = 'bitcoinpay';
 		$this->tab = 'payments_gateways';
-		$this->version = '0.5';
+		$this->version = '1.0.0';
 		$this->author = 'BitcoinPay';
-                $this->module_key = '5579ce051d8c78b348116faae18ea14a';
 		$this->ps_versions_compliancy = array('min' => '1.5', 'max' => '1.6');
 		$this->controllers = array('payment', 'notification', 'return');
 
@@ -39,8 +39,11 @@ class BitcoinPay extends PaymentModule
 		$this->displayName = $this->l("BitcoinPay");
 		$this->description = $this->l("Accept Bitcoin payments and receive payouts in multiple currencies.");
 
+		if (!$this->getConfigValue('API_KEY')) {
+			$this->warning = $this->l("Account settings must be configured before using this module.");
+		}
 		if (!count(Currency::checkPaymentCurrencies($this->id))) {
-			$this->warning = $this->l("No currencies have been set for this module.");
+			$this->warning = $this->l("No currencies have been enabled for this module.");
 		}
 
 		if ($apiKey = $this->getConfigValue('API_KEY')) {
@@ -78,7 +81,12 @@ class BitcoinPay extends PaymentModule
 			!Configuration::deleteByName('BITCOINPAY_API_KEY') ||
 			!Configuration::deleteByName('BITCOINPAY_CALLBACK_PASSWORD') ||
 			!Configuration::deleteByName('BITCOINPAY_PAYOUT_CURRENCY') ||
-			!Configuration::deleteByName('BITCOINPAY_NOTIFY_EMAIL')
+			!Configuration::deleteByName('BITCOINPAY_CALLBACK_SSL') ||
+			!Configuration::deleteByName('BITCOINPAY_NOTIFY_EMAIL') ||
+			!Configuration::deleteByName('BITCOINPAY_STATUS_RECEIVED') ||
+			!Configuration::deleteByName('BITCOINPAY_STATUS_CONFIRMED') ||
+			!Configuration::deleteByName('BITCOINPAY_STATUS_ERROR') ||
+			!Configuration::deleteByName('BITCOINPAY_STATUS_REFUND')
 		) {
 			return false;
 		}
@@ -97,8 +105,6 @@ class BitcoinPay extends PaymentModule
 	public function getContent()
 	{
 		$output = "";
-
-		$this->context->controller->addCSS($this->_path . 'assets/css/admin.css', 'all');
 
 		// check if form has been submitted
 		if (Tools::isSubmit('submit' . $this->name)) {
@@ -130,7 +136,7 @@ class BitcoinPay extends PaymentModule
 						|| !is_array($response->active_settlement_currencies)
 						|| !in_array($fieldValues['BITCOINPAY_PAYOUT_CURRENCY'], $response->active_settlement_currencies)
 					) {
-						$errorMsg = $this->l("Settlement currency is not set in BitcoinPay account > go to Settings > Payout and set payout currency first.");
+						$errorMsg = $this->l("Settlement currency not set in your BitcoinPay account. Go to Settings > Payout and set payout currency first.");
 
 						if (!empty($response->active_settlement_currencies)) {
 							$errorMsg .= '<br><br> ' . $this->l("You currently have the following payout currencies set in your account:");
@@ -168,63 +174,125 @@ class BitcoinPay extends PaymentModule
 		// get default language
 		$defaultLang = (int)Configuration::get('PS_LANG_DEFAULT');
 
+		// get all order statuses to use for order status options
+		$orderStatuses = OrderState::getOrderStates((int)$this->context->cookie->id_lang);
+
 		// form fields
 		$formFields = array(
-			'form' => array(
-				'legend' => array(
-					'title' => $this->l("BitcoinPay Settings"),
-					'icon' => 'icon-cog',
-				),
-				'input' => array(
-					array(
-						'type' => 'text',
-						'name' => 'BITCOINPAY_API_KEY',
-						'label' => $this->l("API Key"),
-						'desc' => $this->l("API key is used for backend authentication and you should keep it private. To find your API key, go to BitcoinPay account > Settings > API."),
-						'required' => true,
+			array(
+				'form' => array(
+					'legend' => array(
+						'title' => $this->l("BitcoinPay Settings"),
+						'icon' => 'icon-cog',
 					),
-					array(
-						'type' => 'text',
-						'name' => 'BITCOINPAY_CALLBACK_PASSWORD',
-						'label' => $this->l("Callback Password"),
-						'desc' => $this->l("Used as a data validation for stronger security. Callback password must be set under Settings > API in your BitcoinPay account."),
-						'required' => true,
+					'tabs' => array(
+						'general' => $this->l("General"),
+						'order_statuses' => $this->l("Order Statuses"),
 					),
-					array(
-						'type' => 'text',
-						'name' => 'BITCOINPAY_PAYOUT_CURRENCY',
-						'label' => $this->l("Payout Currency"),
-						'desc' => $this->l("Currency of settlement. You must first set a payout for currency in your account Settings > Payout in your account at BitcoinPay. If the currency is not set in payout, the request will return an error."),
-						'required' => true,
-						'size' => 10,
-					),
-					array(
-						'type' => 'switch',
-						'name' => 'BITCOINPAY_CALLBACK_SSL',
-						'label' => $this->l("Callback SSL"),
-						'desc' => $this->l("Allows SSL (HTTPS) to be used for payment callbacks sent to your server. Note that some SSL certificates may not work (such as self-signed certificates), so be sure to do a test payment if you enable this to verify that your server is able to receive callbacks successfully."),
-						'values' => array(
-							array(
-								'id' => 'active_on',
-								'value' => 1,
-								'label' => $this->l("Enable"),
+					'input' => array(
+						array(
+							'tab' => 'general',
+							'name' => 'BITCOINPAY_API_KEY',
+							'type' => 'text',
+							'label' => $this->l("API Key"),
+							'desc' => $this->l("API key is used for backend authentication and you should keep it private. To find your API key, go to BitcoinPay account > Settings > API."),
+							'required' => true,
+						),
+						array(
+							'tab' => 'general',
+							'name' => 'BITCOINPAY_CALLBACK_PASSWORD',
+							'type' => 'text',
+							'label' => $this->l("Callback Password"),
+							'desc' => $this->l("Used as a data validation for stronger security. Callback password must be set under Settings > API in your BitcoinPay account."),
+							'required' => true,
+						),
+						array(
+							'tab' => 'general',
+							'name' => 'BITCOINPAY_PAYOUT_CURRENCY',
+							'type' => 'text',
+							'label' => $this->l("Payout Currency"),
+							'desc' => $this->l("Currency of settlement. You must first set a payout for currency in your account Settings > Payout in your account at BitcoinPay. If the currency is not set in payout, the request will return an error."),
+							'required' => true,
+							'size' => 10,
+						),
+						array(
+							'tab' => 'general',
+							'name' => 'BITCOINPAY_CALLBACK_SSL',
+							'type' => 'switch',
+							'label' => $this->l("Callback SSL"),
+							'desc' => $this->l("Allows SSL (HTTPS) to be used for payment callbacks sent to your server. Note that some SSL certificates may not work (such as self-signed certificates), so be sure to do a test payment if you enable this to verify that your server is able to receive callbacks successfully."),
+							'values' => array(
+								array(
+									'id' => 'active_on',
+									'value' => 1,
+									'label' => $this->l("Enable"),
+								),
+								array(
+									'id' => 'active_off',
+									'value' => 0,
+									'label' => $this->l("Disable"),
+								),
 							),
-							array(
-								'id' => 'active_off',
-								'value' => 0,
-								'label' => $this->l("Disable"),
+						),
+						array(
+							'tab' => 'general',
+							'name' => 'BITCOINPAY_NOTIFY_EMAIL',
+							'type' => 'text',
+							'label' => $this->l("Notification Email"),
+							'desc' => $this->l("Email address to send payment status notifications to. Leave blank to disable."),
+						),
+						array(
+							'tab' => 'order_statuses',
+							'name' => 'BITCOINPAY_STATUS_CONFIRMED',
+							'type' => 'select',
+							'label' => $this->l("Payment Confirmed"),
+							'desc' => $this->l("Callback status: confirmed — Payment has been received and confirmed. The order should be fulfilled."),
+							'options' => array(
+								'query' => $orderStatuses,
+								'id' => 'id_order_state',
+								'name' => 'name',
+							),
+						),
+						array(
+							'tab' => 'order_statuses',
+							'name' => 'BITCOINPAY_STATUS_RECEIVED',
+							'type' => 'select',
+							'label' => $this->l("Payment Received"),
+							'desc' => $this->l("Callback status: received — Payment has been received but not confirmed yet. The order should not be fulfilled until updated to confirmed."),
+							'options' => array(
+								'query' => $orderStatuses,
+								'id' => 'id_order_state',
+								'name' => 'name',
+							),
+						),
+						array(
+							'tab' => 'order_statuses',
+							'name' => 'BITCOINPAY_STATUS_ERROR',
+							'type' => 'select',
+							'label' => $this->l("Payment Error"),
+							'desc' => $this->l("Callback status: invalid, insufficient_amount, paid_after_timeout — There was a problem processing the payment."),
+							'options' => array(
+								'query' => $orderStatuses,
+								'id' => 'id_order_state',
+								'name' => 'name',
+							),
+						),
+						array(
+							'tab' => 'order_statuses',
+							'name' => 'BITCOINPAY_STATUS_REFUND',
+							'type' => 'select',
+							'label' => $this->l("Payment Refund"),
+							'desc' => $this->l("Callback status: refund — The payment has been returned to the customer."),
+							'options' => array(
+								'query' => $orderStatuses,
+								'id' => 'id_order_state',
+								'name' => 'name',
 							),
 						),
 					),
-					array(
-						'type' => 'text',
-						'name' => 'BITCOINPAY_NOTIFY_EMAIL',
-						'label' => $this->l("Notification Email"),
-						'desc' => $this->l("Email address to send payment status notifications to. Leave blank to disable."),
+					'submit' => array(
+						'title' => $this->l("Save"),
 					),
-				),
-				'submit' => array(
-					'title' => $this->l("Save"),
 				),
 			),
 		);
@@ -262,7 +330,7 @@ class BitcoinPay extends PaymentModule
 			'id_language' => $this->context->language->id,
 		);
 
-		return $helper->generateForm(array($formFields));
+		return $helper->generateForm($formFields);
 	}
 
 	public function getConfigFieldValues()
@@ -273,14 +341,42 @@ class BitcoinPay extends PaymentModule
 			'BITCOINPAY_CALLBACK_SSL' => $this->getConfigValue('CALLBACK_SSL', true),
 			'BITCOINPAY_PAYOUT_CURRENCY' => $this->getConfigValue('PAYOUT_CURRENCY', true),
 			'BITCOINPAY_NOTIFY_EMAIL' => $this->getConfigValue('NOTIFY_EMAIL', true),
+			'BITCOINPAY_STATUS_CONFIRMED' => $this->getConfigValue('STATUS_CONFIRMED', true),
+			'BITCOINPAY_STATUS_RECEIVED' => $this->getConfigValue('STATUS_RECEIVED', true),
+			'BITCOINPAY_STATUS_ERROR' => $this->getConfigValue('STATUS_ERROR', true),
+			'BITCOINPAY_STATUS_REFUND' => $this->getConfigValue('STATUS_REFUND', true),
 		);
 	}
 
-	public function getConfigValue($name, $post = false)
+	public function getDefaultValues()
 	{
-		$name = 'BITCOINPAY_' . $name;
+		if (!$this->defaultValues) {
+			$this->defaultValues = array(
+				'BITCOINPAY_STATUS_CONFIRMED' => Configuration::get('PS_OS_PAYMENT'),
+				'BITCOINPAY_STATUS_RECEIVED' => $this->getOrderStatus('PAYMENT_RECEIVED'),
+				'BITCOINPAY_STATUS_ERROR' => Configuration::get('PS_OS_ERROR'),
+				'BITCOINPAY_STATUS_REFUND' => Configuration::get('PS_OS_REFUND'),
+			);
+		}
 
-		return trim($post && isset($_POST[$name]) ? $_POST[$name] : Configuration::get($name));
+	    return $this->defaultValues;
+	}
+
+	public function getConfigValue($key, $post = false)
+	{
+		$name = 'BITCOINPAY_' . $key;
+		$value = trim($post && isset($_POST[$name]) ? $_POST[$name] : Configuration::get($name));
+
+		// use default value if empty
+		if (!strlen($value)) {
+			$defaultValues = $this->getDefaultValues();
+
+			if (isset($defaultValues[$name])) {
+				$value = $defaultValues[$name];
+			}
+		}
+
+		return $value;
 	}
 
 	/**
@@ -294,7 +390,7 @@ class BitcoinPay extends PaymentModule
 
 		$this->smarty->assign(array(
 			'payment_url' => $this->context->link->getModuleLink('bitcoinpay', 'payment', array(), Configuration::get('PS_SSL_ENABLED')),
-			'button_image_url' => $this->_path . 'assets/img/logo_64.png',
+			'button_image_url' => $this->_path . 'views/img/logo_64.png',
 			'presta_15' => version_compare(_PS_VERSION_, '1.5', '>=') && version_compare(_PS_VERSION_, '1.6', '<'),
 		));
 
@@ -309,8 +405,8 @@ class BitcoinPay extends PaymentModule
 
 		$this->smarty->assign(array(
 			'products' => $params['objOrder']->getProducts(),
-			'success' => $params['objOrder']->current_state == Configuration::get('PS_OS_PAYMENT'),
-			'error' => $params['objOrder']->current_state == Configuration::get('PS_OS_ERROR'),
+			'success' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_CONFIRMED'),
+			'error' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_ERROR'),
 		));
 
 		return $this->display(__FILE__, 'order_confirmation.tpl');
@@ -321,12 +417,12 @@ class BitcoinPay extends PaymentModule
 	    $messages = array(
 		    'pending' => $this->l("Pending — Waiting for payment."),
 		    'received' => $this->l("Received — Payment has been received but not confirmed yet."),
+		    'confirmed' => $this->l("Confirmed — Payment is confirmed and will be settled from your BitcoinPay account."),
 		    'insufficient_amount' => $this->l("Insufficient Amount — Customer sent amount lower than required. Customer can ask for the refund directly from the invoice URL."),
 		    'invalid' => $this->l("Invalid — A payment error has occurred. Check your BitcoinPay account for details."),
 		    'timeout' => $this->l("Timeout — Payment has not been paid in given time period and has expired."),
 		    'paid_after_timeout' => $this->l("Paid After Timeout — Payment has been paid too late. Customer can ask for refund directly from the invoice url."),
 		    'refund' => $this->l("Refunded — Payment has been returned to customer."),
-		    'confirmed' => $this->l("Confirmed — Payment is confirmed and will be settled from your BitcoinPay account."),
 	    );
 
 		return isset($messages[$status]) ? $messages[$status] : $status;
@@ -487,7 +583,7 @@ class BitcoinPay extends PaymentModule
 
 				// copy icon image to os folder
 				if ($icon) {
-					@copy(__DIR__ . '/assets/img/' . $icon, _PS_ROOT_DIR_ . '/img/os/' . $os->id . '.gif');
+					@copy(__DIR__ . '/views/img/' . $icon, _PS_ROOT_DIR_ . '/img/os/' . $os->id . '.gif');
 				}
 
 				return (int)$os->id;

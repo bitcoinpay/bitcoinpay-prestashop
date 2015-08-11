@@ -60,18 +60,18 @@ class BitcoinpayNotificationModuleFrontController extends ModuleFrontController
 		// set order status according to payment status
 		switch ($callbackData->status) {
 			case 'received':
-				$orderStatus = $this->module->getOrderStatus('PAYMENT_RECEIVED');
+				$orderStatus = (int)$this->module->getConfigValue('STATUS_RECEIVED');
 				break;
 			case 'confirmed':
-				$orderStatus = (int)Configuration::get('PS_OS_PAYMENT');
+				$orderStatus = (int)$this->module->getConfigValue('STATUS_CONFIRMED');
 				break;
 			case 'insufficient_amount':
 			case 'invalid':
 			case 'paid_after_timeout':
-				$orderStatus = (int)Configuration::get('PS_OS_ERROR');
+				$orderStatus = (int)$this->module->getConfigValue('STATUS_ERROR');
 				break;
 			case 'refund':
-				$orderStatus = (int)Configuration::get('PS_OS_REFUND');
+				$orderStatus = (int)$this->module->getConfigValue('STATUS_REFUND');
 				break;
 			default:
 				// payment status is one we don't handle, so just stop processing
