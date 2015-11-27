@@ -68,7 +68,7 @@ class BitcoinPay extends PaymentModule
 		// create custom order statuses
 		$this->createOrderStatus('PAYMENT_RECEIVED', "Bitcoin payment received (unconfirmed)", array(
 			'color' => '#FF8C00',
-			'paid' => true,
+			'paid' => false,
 		));
 
 		return true;
@@ -406,7 +406,10 @@ class BitcoinPay extends PaymentModule
 		$this->smarty->assign(array(
 			'products' => $params['objOrder']->getProducts(),
 			'success' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_CONFIRMED'),
+			'received' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_RECEIVED'),
+			'refunded' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_REFUND'),
 			'error' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_ERROR'),
+			'outofstock' => $params['objOrder']->current_state == (int)Configuration::get('PS_OS_OUTOFSTOCK')
 		));
 
 		return $this->display(__FILE__, 'order_confirmation.tpl');
