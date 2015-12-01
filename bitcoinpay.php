@@ -402,14 +402,44 @@ class BitcoinPay extends PaymentModule
 		if (!$this->active) {
 			return;
 		}
+		
+		$orderId = $params['objOrder']->id;
+		$id_order_states = Db::getInstance()->ExecuteS('
+		SELECT `id_order_state`
+		FROM `'._DB_PREFIX_.'order_history`
+		WHERE `id_order` = '.$orderId.'
+		ORDER BY `date_add` DESC, `id_order_history` DESC');
+		
+		$outofstock = false;
+		$confirmed = false;
+		$received = false;
+		$refunded = false;
+		$error = false;
+		foreach($id_order_states as $state) {
+			if ($state['id_order_state'] == (int)Configuration::get('PS_OS_OUTOFSTOCK')) {
+				$outofstock = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_CONFIRMED')) {
+				$confirmed = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_RECEIVED')) {
+				$received = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_REFUND')) {
+				$refunded = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_ERROR')) {
+				$error = true;
+			}
+		}
 
 		$this->smarty->assign(array(
 			'products' => $params['objOrder']->getProducts(),
-			'success' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_CONFIRMED'),
-			'received' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_RECEIVED'),
-			'refunded' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_REFUND'),
-			'error' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_ERROR'),
-			'outofstock' => $params['objOrder']->current_state == (int)Configuration::get('PS_OS_OUTOFSTOCK')
+			'confirmed' => $confirmed,
+			'received' => $received,
+			'refunded' => $refunded,
+			'error' => $error,
+			'outofstock' => $outofstock
 		));
 
 		return $this->display(__FILE__, 'order_confirmation.tpl');
