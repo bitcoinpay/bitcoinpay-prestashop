@@ -1,7 +1,6 @@
 <?php
 /**
- * @package     PrestaShop
- * @subpackage  BitcoinPay
+ * @package     PrestaShop\BitcoinPay
  * @author      Jarryd Goodman <jarryd@beyondweb.co.za>
  * @author      Saul Fautley <saul@beyondweb.co.za>
  * @copyright   Copyright © 2015, BeyondWEB
@@ -25,7 +24,7 @@ class BitcoinPay extends PaymentModule
 	{
 		$this->name = 'bitcoinpay';
 		$this->tab = 'payments_gateways';
-		$this->version = '1.0.0';
+		$this->version = '1.0.1';
 		$this->author = 'BitcoinPay';
 		$this->ps_versions_compliancy = array('min' => '1.5', 'max' => '1.6');
 		$this->controllers = array('payment', 'notification', 'return');
@@ -60,7 +59,7 @@ class BitcoinPay extends PaymentModule
 		if (
 			!parent::install()
 			|| !$this->registerHook('payment')
-			|| !$this->registerHook('displayOrderConfirmation')
+			|| !$this->registerHook('paymentReturn')
 		) {
 			return false;
 		}
@@ -68,7 +67,7 @@ class BitcoinPay extends PaymentModule
 		// create custom order statuses
 		$this->createOrderStatus('PAYMENT_RECEIVED', "Bitcoin payment received (unconfirmed)", array(
 			'color' => '#FF8C00',
-			'paid' => false,
+			'paid' => true,
 		));
 
 		return true;
@@ -384,7 +383,7 @@ class BitcoinPay extends PaymentModule
 	 */
 	public function hookPayment($params)
 	{
-		if (!$this->active) {
+		if (!$this->active || !$this->apiKey) {
 			return;
 		}
 
@@ -392,57 +391,25 @@ class BitcoinPay extends PaymentModule
 			'payment_url' => $this->context->link->getModuleLink('bitcoinpay', 'payment', array(), Configuration::get('PS_SSL_ENABLED')),
 			'button_image_url' => $this->_path . 'views/img/logo_64.png',
 			'presta_15' => version_compare(_PS_VERSION_, '1.5', '>=') && version_compare(_PS_VERSION_, '1.6', '<'),
+			'params' => $params,
 		));
 
 		return $this->display(__FILE__, 'payment.tpl');
 	}
 
-	public function hookDisplayOrderConfirmation($params)
+	public function hookPaymentReturn($params)
 	{
 		if (!$this->active) {
 			return;
 		}
-		
-		$orderId = $params['objOrder']->id;
-		$id_order_states = Db::getInstance()->ExecuteS('
-		SELECT `id_order_state`
-		FROM `'._DB_PREFIX_.'order_history`
-		WHERE `id_order` = '.$orderId.'
-		ORDER BY `date_add` DESC, `id_order_history` DESC');
-		
-		$outofstock = false;
-		$confirmed = false;
-		$received = false;
-		$refunded = false;
-		$error = false;
-		foreach($id_order_states as $state) {
-			if ($state['id_order_state'] == (int)Configuration::get('PS_OS_OUTOFSTOCK')) {
-				$outofstock = true;
-			}
-			if ($state['id_order_state'] == $this->getConfigValue('STATUS_CONFIRMED')) {
-				$confirmed = true;
-			}
-			if ($state['id_order_state'] == $this->getConfigValue('STATUS_RECEIVED')) {
-				$received = true;
-			}
-			if ($state['id_order_state'] == $this->getConfigValue('STATUS_REFUND')) {
-				$refunded = true;
-			}
-			if ($state['id_order_state'] == $this->getConfigValue('STATUS_ERROR')) {
-				$error = true;
-			}
-		}
 
 		$this->smarty->assign(array(
-			'products' => $params['objOrder']->getProducts(),
-			'confirmed' => $confirmed,
-			'received' => $received,
-			'refunded' => $refunded,
-			'error' => $error,
-			'outofstock' => $outofstock
+			'success' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_CONFIRMED'),
+			'error' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_ERROR'),
+			'params' => $params,
 		));
 
-		return $this->display(__FILE__, 'order_confirmation.tpl');
+		return $this->display(__FILE__, 'payment_return.tpl');
 	}
 
 	public function getStatusDesc($status)
@@ -516,8 +483,9 @@ class BitcoinPay extends PaymentModule
 	 * @param array $request API request post data.
 	 * @param bool $returnRaw Return the raw response string.
 	 *
-	 * @return stdClass Response data after json_decode.
 	 * @throws Exception
+	 *
+	 * @return stdClass Response data after json_decode.
 	 */
 	public function apiRequest($endpoint, $request = array(), $returnRaw = false)
 	{
@@ -575,7 +543,7 @@ class BitcoinPay extends PaymentModule
 
 	/**
 	 * Creates a custom order status for this module.
-	 * @see OrderStateCore
+	 * @uses OrderStateCore
 	 *
 	 * @param string $name
 	 * @param string $label
@@ -628,7 +596,7 @@ class BitcoinPay extends PaymentModule
 
 	/**
 	 * Creates a custom order status for this module.
-	 * @see OrderStateCore
+	 * @uses OrderStateCore
 	 *
 	 * @param string $name
 	 */
@@ -649,7 +617,7 @@ class BitcoinPay extends PaymentModule
 
 	/**
 	 * Gets the custom order status ID.
-	 * @see OrderStateCore
+	 * @uses OrderStateCore
 	 *
 	 * @param string $name
 	 *

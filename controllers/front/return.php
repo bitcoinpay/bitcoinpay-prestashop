@@ -1,7 +1,6 @@
 <?php
 /**
- * @package     PrestaShop
- * @subpackage  BitcoinPay
+ * @package     PrestaShop\BitcoinPay
  * @author      Saul Fautley <saul@beyondweb.co.za>
  * @copyright   Copyright © 2015, BeyondWEB
  */
