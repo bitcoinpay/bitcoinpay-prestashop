@@ -18,7 +18,7 @@
 	</div>
 {elseif $error}
 	<div class="alert alert-danger">
-		{l s='There was a problem processing your order. We recommend to press back button in your web browser and request the refund via BitcoinPay.' mod='bitcoinpay'}|sprintf:"<a href=\"{$link->getPageLink('contact')}\">":'</a>'}
+		{l s='There was a problem processing your order. We recommend to press back button in your web browser and request the refund via BitcoinPay.' mod='bitcoinpay'}
 	</div>
 {else}
 	<div class="alert alert-success">
