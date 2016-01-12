@@ -1,6 +1,7 @@
 <?php
 /**
- * @package     PrestaShop\BitcoinPay
+ * @package     PrestaShop
+ * @subpackage  BitcoinPay
  * @author      Jarryd Goodman <jarryd@beyondweb.co.za>
  * @author      Saul Fautley <saul@beyondweb.co.za>
  * @copyright   Copyright © 2015, BeyondWEB
@@ -67,7 +68,7 @@ class BitcoinPay extends PaymentModule
 		// create custom order statuses
 		$this->createOrderStatus('PAYMENT_RECEIVED', "Bitcoin payment received (unconfirmed)", array(
 			'color' => '#FF8C00',
-			'paid' => true,
+			'paid' => false,
 		));
 
 		return true;
@@ -391,7 +392,6 @@ class BitcoinPay extends PaymentModule
 			'payment_url' => $this->context->link->getModuleLink('bitcoinpay', 'payment', array(), Configuration::get('PS_SSL_ENABLED')),
 			'button_image_url' => $this->_path . 'views/img/logo_64.png',
 			'presta_15' => version_compare(_PS_VERSION_, '1.5', '>=') && version_compare(_PS_VERSION_, '1.6', '<'),
-			'params' => $params,
 		));
 
 		return $this->display(__FILE__, 'payment.tpl');
@@ -403,10 +403,43 @@ class BitcoinPay extends PaymentModule
 			return;
 		}
 
+		$orderId = $params['objOrder']->id;
+		$id_order_states = Db::getInstance()->ExecuteS('
+		SELECT `id_order_state`
+		FROM `'._DB_PREFIX_.'order_history`
+		WHERE `id_order` = '.$orderId.'
+		ORDER BY `date_add` DESC, `id_order_history` DESC');
+
+		$outofstock = false;
+		$confirmed = false;
+		$received = false;
+		$refunded = false;
+		$error = false;
+		foreach($id_order_states as $state) {
+			if ($state['id_order_state'] == (int)Configuration::get('PS_OS_OUTOFSTOCK')) {
+				$outofstock = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_CONFIRMED')) {
+				$confirmed = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_RECEIVED')) {
+				$received = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_REFUND')) {
+				$refunded = true;
+			}
+			if ($state['id_order_state'] == $this->getConfigValue('STATUS_ERROR')) {
+				$error = true;
+			}
+		}
+
 		$this->smarty->assign(array(
-			'success' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_CONFIRMED'),
-			'error' => $params['objOrder']->current_state == $this->getConfigValue('STATUS_ERROR'),
-			'params' => $params,
+			'products' => $params['objOrder']->getProducts(),
+			'confirmed' => $confirmed,
+			'received' => $received,
+			'refunded' => $refunded,
+			'error' => $error,
+			'outofstock' => $outofstock
 		));
 
 		return $this->display(__FILE__, 'payment_return.tpl');
@@ -483,9 +516,8 @@ class BitcoinPay extends PaymentModule
 	 * @param array $request API request post data.
 	 * @param bool $returnRaw Return the raw response string.
 	 *
-	 * @throws Exception
-	 *
 	 * @return stdClass Response data after json_decode.
+	 * @throws Exception
 	 */
 	public function apiRequest($endpoint, $request = array(), $returnRaw = false)
 	{
